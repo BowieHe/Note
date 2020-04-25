@@ -98,6 +98,54 @@ void plusOne(TreeNode root) {
 
 在做二叉树问题时，设置`if (root == null) return;`不仅仅是在root = null时直接返回，也是递归到最后返回的值
 
+# BFS（广度优先）
+
+如果在做二叉树遍历的时候，广度优先则是新建一个ArrayList和Queue。在每一个层，使用for循环将节点加入Queue，然后在下一次循环时pop每一个节点，再将节点值放入ArrayList，循环往复，知道所有的根节点下都没有了子节点
+
+```java
+List<List<Integer>> res = new ArrayList<>();
+if (root == null) return res;
+
+LinkedList<TreeNode> queue = new LinkedList<>();
+queue.offer(root);
+while (!queue.isEmpty()) {
+  List<Integer> vales = new ArrayList<>();
+  int size = queue.size();
+  for (int i = 0; i < size; i++) {
+    TreeNode node = queue.pop();
+    vales.add(node.val);
+    if (node.left != null) queue.offer(node.left);
+    if (node.right != null) queue.offer(node.right);
+  }
+  res.add(vales);
+}
+Collections.reverse(res);
+return res;
+```
+
+# DFS深度优先
+
+遍历二叉树的同时记住每一层所在的level，根据level来放入对应的值
+
+```java
+private void dfs(TreeNode root, int lelve, List<List<Integer>> list) {
+  if (root == null) {//停止条件
+    return ;
+  }
+  if (list.size() <= lelve) {
+    //说明当前层，还没有开始存数据,进行初始化
+    list.add(lelve, new ArrayList<Integer>());
+  }
+  //将当前节点的数据存储到当前层
+  list.get(lelve).add(root.val);
+  //继续遍历遍历下一层的数据
+  dfs(root.left, lelve + 1, list);
+  dfs(root.right, lelve + 1, list);
+}
+```
+
+
+
 # 小细节
 
 如果返回值为List<List<Integer>> ans 类型：
@@ -105,4 +153,7 @@ void plusOne(TreeNode root) {
 增加第一个元素为：
 `ans.add(new ArrayList<>());     ans.get(0).add(1);`
 得到的结果是[  [ 1 ]  ]
+
+处理String问题，比如回文字串问题时，使用正则表达式可以快速筛选，如`[^abc] `表示除abc以外任意字符；`[a-z-[bc]]`a-z不包含bc；`[a-z-[^def]]`def
+通过`char[] c=s.toCharArray()`将字符串转换为char的list更好用下标处理
 
