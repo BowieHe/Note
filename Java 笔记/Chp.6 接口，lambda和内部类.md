@@ -112,3 +112,170 @@ new SuperType(construction parameter){
 
 利用代理在运行时创建一个实现了一组给定接口的新类。只在编译时无法确定要实现哪个接口时使用
 
+Java里存在**静态代理和动态代理**
+
+## 静态代理
+
+静态代理在使用的时候，需要定义接口或者父类，被代理的对象与代理对象一起实现相同的接口或者继承相同父类
+
+比如模拟保存动作，定义一个保存动作的接口:IUserDao.java，然后目标对象实现这个接口方法UserDao.java，此时如果使用静态代理，需要在代理对象(UserDaoProxy.java)中也实现IUserDao接口。调用的时候通过调用代理对象的方法来调用目标对象。
+
+```java
+//接口：IUserDao.java
+public interface IUserDao{
+  void save();
+}
+//目标对象：UserDao.java
+public class UserDao implements IUserDao{
+  public void save(){
+    System.out.println("data has been saved");
+  }
+}
+//代理对象：UserDaoProxy.java
+public class UserDaoProxy implements IUserDao{
+  private IUserDao target;//保存目标对象
+  public UserDaoProxy(IUserDao target){
+    this.target=target;
+  }
+  public void save(){
+    System.out.print("start...");
+    target.save();//执行目标对象方法
+    System.out.print("end....");
+  }
+}
+//测试类：App.java
+public class App{
+  public static void main(String[] args){
+    UserDao target = new UserDao();//目标对象
+    //代理对象，把目标对象传给代理对象，建立代理关系
+    UserDaoProxy proxy = new UserDaoProxy(target);
+    proxy.save();//执行代理方法
+  }
+}
+```
+
+静态代理可以做到在不修改目标对象的功能前提下，对目标功能进行拓展
+
+缺点：由于代理对象需要和目标对象实现一样的接口，所以会有很多代理类。类太多的同时，一旦接口增加方法，目标对象与代理对象都需要维护
+
+## 动态代理
+
+特点：
+
+- 代理对象，不需要实现接口
+- 代理对象的生成，是利用JDK的API，动态的在内存中构建代理对象（需要我们指定创建代理对象/目标对象实现的接口的类型）
+- 动态代理也叫做：JDK代理，接口代理
+
+JDK中生成代理对象的API：(java.lang.reflect.Proxy)
+JDK实现代理只需要使用newProxyInstance方法，但是该方法需要接受三个参数
+`static Object newProxyInsatance(ClassLoader loader, Class<?>[] interface, InvocationHandler h)`
+
+- ClassLoader loader：指定当前目标对象使用类加载器，获取加载器的方法是固定的
+- Class<?>[] interface：目标对象实现的接口的类型，使用范型方式确认类型 
+- InvocationHandler h：事件处理，执行目标对象的方法时，会触发事件处理器的方法，会把当前执行目标对象的方法作为参数传入。
+
+接口类IUserDao.java以及接口实现类，目标对象UserDao是一样的。在这个基础上，增加一个代理工厂类（ProxyFactory.java），将代理类写在这个地方，然后在测试类（需要用到代理的代码）中先建立目标对象和代理对象的联系，然后代用代理对象的同名方法
+
+```java
+//ProxyFactory.java
+public class ProxyFactory{
+  private Object target;
+  public ProxyFactory(Object target){
+    this.target.target;
+  }
+  public Object getProxyInstance(){
+    return Proxy.newProxyInstance(
+      target.getClass().getClassLoader(),
+      target.getClass().getInterface(),
+      new InvocationHandler(){
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args)throw Throwable{
+          System.out.print("start1...");
+          //执行目标对象方法
+          Object.returnValue = method.invoke(target,args);
+          System.out.print("submit...");
+          return returnValue;
+        }
+      }
+    );
+  }
+}
+
+//App.java
+public class App{
+  public static void main(String[] args){
+    //目标对象
+    IUserDao target = new UserDao();
+    //原始类型class cn.itcast.b_dynamic.UserDao
+    System.out.print(target.getClass());
+    //给目标对象，创建代理对象
+    IUserDao proxy = (IUserDao)new ProxyFactory(target).getProxyInstance();
+    //class $proxy 内存中动态生成的代理对象
+    System.out.print(proxy.getClass());
+    //执行方法（代理对象）
+    proxy.save();
+  }
+}
+```
+
+其中代理对象不需要实现接口，但是目标对象一定要实现接口，否则不能用动态代理
+
+## Cglib代理
+
+静态代理和动态代理模式有个相同点就是都要求目标对象是实现一个接口的对象，但是并不时所有的对象都会实现一个接口，也存在没有任何接口的对象。这时就可以用继承目标类以目标对象子类的方式实现代理，这就是Cglib代理，也叫子类代理。是在内存中构建一个子类对象从而实现对目标对象功能的拓展。
+
+- JDK的动态代理有一个限制,就是使用动态代理的对象必须实现一个或多个接口,如果想代理没有实现接口的类,就可以使用Cglib实现.
+- Cglib是一个强大的高性能的代码生成包,它可以在运行期扩展java类与实现java接口.它广泛的被许多AOP的框架使用,例如Spring AOP和synaop,为他们提供方法的interception(拦截)
+- Cglib包的底层是通过使用一个小而块的字节码处理框架ASM来转换字节码并生成新的类.不鼓励直接使用ASM,因为它要求你必须对JVM内部结构包括class文件的格式和指令集都很熟悉.
+
+Cglib代理的类不能为final，否则会报错。同时目标对象的方法如果是final/static，那么就不会执行目标对象额外的业务方法
+
+```java
+//目标对象
+public class UserDao{
+  public void save(){
+    System.out.print("saved...");
+  }
+}
+//Cglib子类代理工厂
+public class ProxyFactory implements MethodInterceptor{
+  //维护目标对象
+  private Object target;
+  public ProxyFactory(Object target){
+    this.target = target;
+  }
+  //给目标对象创建一个代理对象
+  public Object getProxyInsstance(){
+    //1.工具类
+    Enhancer en = new Enhencer();
+    //2.设置父类
+    en.setSuperclass(target.getClass());
+    //3.设置回调函数
+    en.setCallback(this);
+    //4.创建子类（代理对象）
+    return en.create();
+  }
+  @Override
+  public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable{
+    System.out.print("start..");
+    //执行目标对象方法
+    Object returnValue = method.invoke(target, args);
+    System.out.print("submitted..");
+    return returnVlaue;
+  }
+}
+//测试
+public class App{
+  @Test
+  public void test(){
+    //目标对象
+    UserDao target = new UserDao();
+    //代理对象
+    UserDao proxy = (UserDao)new ProxyFactory(target).
+      getProxyInstance();
+    //执行代理对象的方法
+    proxy.save();
+  }
+}
+```
+
