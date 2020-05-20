@@ -99,7 +99,7 @@ border设置图片边框
 `<span></span>`span是内联标签，长度是封装的数据长度
 `<p></p>`p是段落标签，默认上下方空一行，但是如果上面也是则只是一行
 
-7. 表格标签
+8. 表格标签
 
 ```html
 <table border="1" width="123"height="123" cellspacing="0">  
@@ -111,7 +111,7 @@ border设置图片边框
 </table>
 ```
 
-8. 跨行跨列表格
+9. 跨行跨列表格
 
 ```html
 <td colspan="2"></td>  跨列，合并同行两列
@@ -119,12 +119,12 @@ border设置图片边框
 <td rowspan="2" colspan="2"></td> 合并两行两列
 ```
 
-9. 了解iframe框架标签（内嵌窗口）
+10. 了解iframe框架标签（内嵌窗口）
 
 `<iframe src="address" height="200" name="abc"></iframe>`
 和a标签组合使用，iframe添加一个name属性，在a标签中target对象改为iframe的name即可
 
-10. 表单标签
+11. 表单标签
 
 ```html
 <form action="www.baidu.com" method="post">

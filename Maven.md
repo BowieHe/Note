@@ -55,7 +55,7 @@ Maven主要做两件事：1，统一开发规范和工具 2，统一管理jar包
 ## maven常用指令
 
 - mvn clean:清除target文件夹，回到编译之前
-- mvn compile:在`opm.xml`配置的依赖包导入到仓库，完成之后路径内会多一个`target`文件夹，里面主要是编译后的字节码文件
+- mvn compile:在`pom.xml`配置的依赖包导入到仓库，完成之后路径内会多一个`target`文件夹，里面主要是编译后的字节码文件
 - mvn test-compile：target文件夹下厨了classes又多了一个`test-compile`文件夹
 - mvn test：
 - mvn package：target文件夹下多了打包好的jar包

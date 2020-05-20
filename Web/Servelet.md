@@ -15,7 +15,7 @@ Servlet作用：
 1. 接受浏览器发送过来的信息
 2. 给浏览器返回消息，浏览器认识html，可以动态去输出html
 
-# servlet入门
+# Servlet入门
 
 sun公司定义了servlet规范
 
@@ -23,17 +23,18 @@ sun公司定义了servlet规范
 2. 重写service方法（每次请求都会被调用一次）
 3. 在`WebContent/WEB_INF/web/xml`中配置servlet的访问路径。浏览器访问servlet的路径，在根标签`web-app`下直接书写以下内容
 
-```javascript
+```xml
 <servlet>
   <servlet-name>hello</servlet-name> 给servlet配置一个名字
 	<servlet-class>cn.itcast.servlet.hello</servlet-class> 
 	hello的Java文件所在地
+  <load-on-startup>1</load-on-startup>如果调用这个元素，WEB应用程序在启动时，就会装子啊并创建Servlet实例对象，以及调用Servlet实例对象方法init(),数字代表优先级
 </servlet>
 配置servlet访问地址
 <servlet-mapping>
     <servlet-name>hello</servlet-name> 给哪一个servlet配置地址
-		<url-pattern>/hello</url-pattern> 配置访问地址
-				完整地址http://ip:端口号/工程路径/servlet访问地址
+		<url-pattern>/hello</url-pattern> 
+    <url-pattern>/demo</url-pattern> 同一个servlet可以被多次映射
 </servlet-mapping>
 ```
 
@@ -53,8 +54,6 @@ day是Tomcat的工程名， hello是工程中servlet的访问地址
 5. 步骤4 是根据web.xml 文件中 描述 servlet内容来找到servlet的具体实现类
 
 ![WechatIMG1](/Users/bowei/Documents/Note/Pic/WechatIMG1.jpeg)
-
-
 
 ### 模拟GET请求和POST请求的分发
 
@@ -97,6 +96,8 @@ init方法：当服务器创建一个servlet的时候，会调用init方法。�
 
 ### servlet的类继承体系
 
+
+
 从上到下为父类到子类
 
 1. **Interface Servlet**：servlet是JavaEE Web程序中一个组件，Servlet是一个接口，描述了Servlet实例需要实现的方法
@@ -119,19 +120,102 @@ ServletConfig类是Servlet类的配置文件。封装了Servlet的配置文件�
 定义：
 
 1. ServletContext是一个接口
-2. ServletContext是一个域对象
+2. ServletContext是一个域对象，可以简单理解成一个容器(类似Map集合)
 3. 每个Web工程，都对应一个ServletContext对象
 
 作用：
 
-1. ServletContext可以获取web.xml文件中的配置上下文参数
-2. ServletContext可以获取web工程在服务器的工程名
-3. ServletContext可以获取web工程中文件夹或文件在服务器硬盘上的绝对路径
-4. ServletContext可以设置，获取web工程的全局属性
+1. ServletContext既然代表着当前web站点，那么**所有Servlet都共享着一个ServletContext对象**，所以**Servlet之间可以通过ServletContext实现通讯**。
+2. ServletConfig获取的是配置的是单个Servlet的参数信息，**ServletContext可以获取的是配置整个web站点的参数信息**
+3. **利用ServletContext读取web站点的资源文件**
+4. 实现Servlet的转发【用ServletContext转发不多，主要用request转发】
+
+## Servlet之间实时通讯
+
+实现Servlet之间的通讯要用到ServletContext的setAttribute方法
+
+```java
+//Demo1
+//获取到ServletContext对象
+ServletContext servletContext = this.getServletContext();
+String value = "zhongfucheng";
+//MyName作为关键字，value作为值存进   域对象【类型于Map集合】
+servletContext.setAttribute("MyName", value);
+
+//Demo2
+//获取ServletContext对象
+ServletContext servletContext = this.getServletContext();
+//通过关键字获取存储在域对象的值
+String value = (String) servletContext.getAttribute("MyName");
+System.out.println(value);
+```
+
+## 获取web站点配置信息
+
+如果想让所有的Servlet都获取到连接数据库的信息，不可能在每个`web.xml`文件中每个Servlet都配置
+
+```xml
+<context-param>
+  <param-name>name</param-name>
+  <param-value>bowie</param-value>
+</context-param>
+```
+
+```java
+//获取到ServletContext对象
+ServletContext servletContext = this.getServletContext();
+
+//通过名称获取值
+String value = servletContext.getInitParameter("name");
+System.out.println(value);
+```
+
+## 读取资源文件
+
+以前读取文件一般是通过`FileInputStream`读取
+`FileInputStream fileInputStream = new FileInputStream("1.png");`
+
+但是以前的程序都是通过JVM来运行，现在通过Tomcat来运行，根据web的目录规范，Servlet编译后的class文件是存放在WEB-INFclasses文件夹中的，所以要进入classes目录中读取文件。
+
+但是如果读取文件模块移动到其他站点，则代码需要重新修改，因此可以通过ServletContext来读取
+
+```java
+//获取到ServletContext对象
+ServletContext servletContext = this.getServletContext();
+
+//调用ServletContext方法获取到读取文件的流
+InputStream inputStream = servletContext.getResourceAsStream("/WEB-INF/classes/zhongfucheng/web/1.png");
+```
+
+如果将文件放在web目录下，则可以直接通过文件名获取
+
+```java
+//获取到ServletContext对象
+ServletContext servletContext = this.getServletContext();
+
+//调用ServletContext方法获取到读取文件的流
+InputStream inputStream = servletContext.getResourceAsStream("2.png");
+```
+
+或者通过类装载器读取资源文件，但是如果文件太大，则会导致内存溢出
+
+```java
+//获取到类装载器
+ClassLoader classLoader = Servlet111.class.getClassLoader();
+
+//通过类装载器获取到读取文件流
+InputStream inputStream = classLoader.getResourceAsStream("3.png");
+```
 
 # HTTP请求协议
 
 格式： 请求首行；请求头信息；空行；请求体
+
+## HTTP1.0 vs HTTP1.1
+
+HTTP1.0协议中，客户端与web服务器建立连接后，只能获得一个web资源【短连接，获取资源后就断开连接】
+
+HTTP1.1协议，允许客户端与web服务器建立连接后，在一个连接上获取多个web资源【保持连接】
 
 ### GET请求协议格式
 
@@ -258,8 +342,6 @@ HttpServletRequest类封装了从客户端传递过来的信息。每次请求�
 
 #### 直接访问http://127.0.0.1:8080/day07/request1 测试
 
-
-
 ## 获取请求参数的值
 
 请求页面`register.html`内容
@@ -327,8 +409,6 @@ Web.xml文件中配置信息
   <url-pattern>/params</url-pattern>
 </servlet-mapping>
 ```
-
-
 
 ## GET请求中文参数值乱码问题解决
 
