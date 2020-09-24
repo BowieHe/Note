@@ -77,3 +77,5 @@ ojpYo4iJy2E5NvFa
 
 
 
+Kafka,redis,zookeeper,mysql, mongoldb
+
