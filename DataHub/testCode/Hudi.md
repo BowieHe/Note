@@ -199,13 +199,16 @@ spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.8.0 \
 ```
 
 #### create impala table for query
-```
-CREATE EXTERNAL TABLE data_t1p873.test_mor_3 like parquet 'hdfs://HDFS44014/tmp/data_t1p873/test_mor_3/test124/b7815e9a-82cd-4636-b61f-ef56d1d64e5c-0_0-61-33987_20210618173300.parquet' stored as hudiparquet location 'hdfs://HDFS44014/tmp/data_t1p873/test_mor_3';
-```
-
 
 ```
-spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.6.0 \
+CREATE EXTERNAL TABLE data_t1p873.test_mor_5
+LIKE PARQUET 'hdfs://HDFS44014/tmp/data_t1p873/test_mor_5/test971/4b4cc8de-fa2a-4974-b827-b8ff38b8dad7-0_508-22-14513_20210622140954.parquet'
+STORED AS HUDIPARQUET
+LOCATION 'hdfs://HDFS44014/tmp/data_t1p873/test_mor_5';
+
+```
+
+```spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.6.0 \
 --class org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer \
 --table-type MERGE_ON_READ \
 --target-base-path hdfs://HDFS44014/tmp/data_t1p873/test_mor \
@@ -237,7 +240,7 @@ spark-submit --class org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer
 ```
 
 
-
+```
 spark-submit \
 --packages org.apache.hudi:hudi-spark-bundle_2.11:0.8.0,org.apache.hudi:hudi-utilities_2.11:0.8.0 \
 --deploy-mode client \
@@ -287,22 +290,9 @@ spark-submit --class org.apache.hudi.utilities.HoodieCompactor \
 
 
 ```
-{
-     "type": "record",
-     "namespace": "com.example",
-     "name": "test_mor",
-     "fields": [
-       { "name": "name", "type": "string" },
-	   { "name": "topic", "type": "string" },
-	   { "name": "last_updater_id", "type": "long" },
-	   { "name": "creator_id", "type": "int" },
-	   { "name": "last_updated", "type": "string" },
-	   { "name": "id", "type": "string" },
-	   { "name": "date_created", "type": "string" },
-	   { "name": "last_updated_batch_id", "type": "string" },
-       { "name": "batch_id", "type": "string" }
-     ]
-} 
+
+
+
 ```
 
 
@@ -345,3 +335,46 @@ spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.8.0,org.apa
  --props /var/demo/config/kafka-source.properties \
  --schemaprovider-class org.apache.hudi.utilities.schema.FilebasedSchemaProvider \
  --continuous
+ 
+ 
+ #### delete data
+ ```
+ 
+ 
+
+#### delete 
+```
+// delete 
+
+import org.apache.hudi.QuickstartUtils._
+import scala.collection.JavaConversions._
+import org.apache.spark.sql.SaveMode._
+import org.apache.hudi.DataSourceReadOptions._
+import org.apache.hudi.DataSourceWriteOptions._
+import org.apache.hudi.config.HoodieWriteConfig._
+import org.apache.spark.sql.functions._
+ 
+val tableName = "test_mor_2"
+val basePath = "hdfs://HDFS44014/tmp/data_t1p873/test_mor_2"
+val dataGen = new DataGenerator
+
+val roViewDF = spark.
+    read.
+    format("org.apache.hudi").
+    load(basePath + "/*")
+
+roViewDF.createOrReplaceTempView("hudi_ro_table")
+
+var ds = spark.sql("select * from hudi_ro_table where batch_id = 'test135'")
+
+
+ds.write.format("org.apache.hudi").
+options(getQuickstartWriteConfigs).
+option(OPERATION_OPT_KEY,"delete").
+option(PRECOMBINE_FIELD_OPT_KEY, "date_created").
+option(RECORDKEY_FIELD_OPT_KEY, "last_updater_id").
+option(PARTITIONPATH_FIELD_OPT_KEY, "batch_id").
+option(TABLE_NAME, tableName).
+mode(Append).
+save(basePath);
+```

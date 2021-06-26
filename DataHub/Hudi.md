@@ -55,38 +55,25 @@ The most significant change here, would be to the compactor, which now carefully
 <https://hudi.apache.org/blog/async-compaction-deployment-model/>
 
 
-- 数据在更新的时候，会指定一个key，如果碰到一个key相同的记录，会进行覆盖（PRECOMBINE_FIELD_OPT_KEY），同时会保修
-- 
 # question
 - ~~写入的TPS和kudu 的比较，只能笔kudu好，不能差于kudu(和spark类似，远好于parquet)
 - ~~延迟的考虑(可以通过compaction的时间间隔控制)~~
-- merge on read的compact 时间间隔(如果是实时数据，structeredStreaming只查到支持通过文件大小和commit数量，不支持定时同步)
-- 多客户端同时读写
-- 热数据还是通过kudu进行读写，冷数据通过hudi进行保存和处理
-- HoodieCompactionConfig 里面不能设置同步事件间隔，只能设置多少个commit之后自动开始同步<https://github.com/Shopify/hoodie/blob/master/hoodie-client/src/main/java/com/uber/hoodie/config/HoodieCompactionConfig.java>
+- merge on read的compact 时间间隔(如果是实时数据，structeredStreaming只查到支持通过文件大小和commit数量，不支持定时同步<https://github.com/Shopify/hoodie/blob/master/hoodie-client/src/main/java/com/uber/hoodie/config/HoodieCompactionConfig.java>，能不能考虑外部手动维护一个定时器，去执行script来手动compact或者通过hudi CLI来执行)
+- 热数据还是通过kudu进行读写，冷数据通过hudi进行保存和处理？
 - ~~hudi表的创建(只查询到spark sql，或者同步数据的时候自动创建)~~
-- 每个表异步的compact都会有一个线程在后台常驻
+- ~~每个表异步的compact都会有一个线程在后台常驻(可以只开始一个spark-application，但是针对每个不同的表，读取里面的数据)
 - ~~能不能只compact(通过CLI或者hudi自己提供的org.apache.hudi.utilities.HoodieCompactor)~~
 - ~~并发的写，从文件连接器和API进来的数据会不会有一边被阻塞(MOR表在inline写的时候会造成阻塞，但是异步写会自动分配到不同的spark partition和 task，可以设置每个task的线程数，不会造成阻塞)~~
-- 如果需要实时的接受实时文件数据，每个表都需要有一个spark的常驻线程在后台保持开启
+- ~~如果需要实时的接受实时文件数据，每个表都需要有一个spark的常驻线程在后台保持开启(测试可以一个stream开启写多个parquet文件，但是针对不同的partition都需要有一系列的代码（hudi的三个KEY），因为toic和内容不同，有点不好写)
 - 相比kudu 整体方案的区别
-- compact检查
 - ~~一个kafka topic里面数据包含去往多个数据表的数据，能不能支持(不建议，可以通过`HoodieMultiTableDeltaStreamer`实现，但是只支持COW表)
-- 并发问题，两个程序同时操作一个hudi表(测试过两个streaming关联到一张hudi表，如果两个topic同时写，会报错`Concurrent update to the log. Multiple streaming jobs detected for 3`)
-- 从HDFS同步数据到HUDI，从hudi同步数据到impala中间需要的时间
-- kafka数据从一个topic中拆分
-- 离线实时数据一起写
+- 并发问题，两个程序同时操作一个hudi表，实时和离线数据同时写(测试过两个streaming关联到一张hudi表，如果两个topic同时写，会报错`Concurrent update to the log. Multiple streaming jobs detected for 3`)(<https://cwiki.apache.org/confluence/display/HUDI/RFC+-+22+%3A+Snapshot+Isolation+using+Optimistic+Concurrency+Control+for+multi-writers>)**但是支持同时写两个不同的文件**
+- kafka数据从一个topic中拆分,不同的hudi_table在写数据的时候，需要指定写入表的3个key，表名，base_path等等信息，即一个dataset需要根据目标表的数量拆分(尝试从redis读meta信息？)
 - 实时数据读取外部数据，比如表meta和mapping映射关系
+- ~~hudi表创建(查到0.9版本中添加了可以通过sparkSQL创建表，或者新写一个空的dataFrame来创建,impala直接创建一张外表，hudi写的时候再创建内表)
 
-
-
-- RECORDKEY_FIELD_OPT_KEY:这个的值会作为HoodieKey的一部分，转换成String格式
-- PARTITIONPATH_FIELD_OPT_KEY：会被用于HoodieKey的partitionPath部分
-- PRECOMBINE_FIELD_OPT_KEY：在合并之前会找到两个记录有相同的key，这时候会取那个有更大的值的
-- INLINE_COMPACT_NUM_DELTA_COMMITS_PROP: configuration controls how many delta commits happen before a compaction is scheduled to be run asynchronously.
-- ASYNC_COMPACT_ENABLE_OPT_KEY: MOR模式默认开启
-
-
+- 为什么ods也要保存为hudi
+- 如果hudi和ods同时存在的时候，
 
 ### hudi两种表的区别：
 #### copy on write(COW)
@@ -103,7 +90,9 @@ MOR表写数据时，记录首先会被快速写进日志文件，稍后会使�
 基于列式存储(parquet)和行式存储(avro)结合的文件进行存储，更新记录到增量文件，压缩同步和异步生成新版本的文件。
 
 在数据读取到的时候，只会写在delta log中，只有commit到了一定的数量(可以设置最小最大commit)，或者到了一定的时间间隔出发了compact的时候，才会吧delta log中的数据写入到对应的分区中
-MOR表异步写的时候是默认开启每一次commit之后都会compact
+MOR表异步写的时候是默认开启每一次commit之后都会compact(**官方目前针对sparkDataset的写方式不支持定时实时压缩，推荐设置commit=1来实现实时同步**)
+
+相比COW表模式，MOR表模式更加适合很多零散数据的写入，更新，更加的适合我们使用的场景
 
 #### MOR vs COW
 |feature | Coty on Write| Merge On Read|
@@ -117,14 +106,31 @@ MOR表异步写的时候是默认开启每一次commit之后都会compact
 #### impala 支持
 hudi table有三种数据的查询：snapshot，incremental，read_optimized(只支持MOR)
 - snapshot：查询操作将查询最新快照的表数据。如果是MOR类型的表，它将动态合并最新文件版本的基本数据和增量数据用于查询；是COW类型的表，则直接查询parquet表，同时提供upsert/delete操作。
-- incremental:查询只能看到写入表的新数据
+- incremental:查询只能看到写入表的新数据（需要提供一个查询的时间戳）
 - read_optimized:查询将查看给定提交/压缩操作的最新快照
 
 impala可以支持两种表类型的查询，
 对于第一中copy on write表，只支持snapshot的查询；对于MOR的表，只支持read_optimized查询
 
-#### compation
-compaction strategy
+
+#### 数据插入
+hudi表在插入的时候，有以下几个参数必须要指定：
+- RECORDKEY_FIELD_OPT_KEY:这个的值会作为HoodieKey的一部分，转换成String格式，用于标记改记录是否唯一
+- PARTITIONPATH_FIELD_OPT_KEY：会被用于HoodieKey的partitionPath部分，配合上面的recordKey记录该条记录是否唯一
+- PRECOMBINE_FIELD_OPT_KEY：在合并之前会找到两个记录有相同的key，这时候会取那个有更大的值的
+下面几个选项是可选项，和主键以及compact相关：
+- INLINE_COMPACT_NUM_DELTA_COMMITS_PROP: 在收到多少个commit之后，数据会被compact
+- ASYNC_COMPACT_ENABLE_OPT_KEY: MOR模式默认开启
+
+**Note**:
+- hoodie表在创建的时候会自动加上几个字段，`hoodie_commit_time，_hoodie_commit_seqno, _hoodie_record_key,_hoodie_partition_path, _hoodie_file_name`,其中commit_time是用来维护hudi所有的commit的时间顺序的；record_key会指定key和值(`name:name0,last_updated_batch_id:test1`)；file_name就是该数据存储的parquet文件名
+- hudi在建表的时候可以指定primaryKey，但是这个字段和hudi的primaryKey不同。hudi的primaryKey是一个recordKey+partitionKey的组合，而建表指定的primary更像是impala外表的primaryKey；
+同时record_key会用于去除重复数据，如果没有指定正确的recordKey，会导致数据的缺失，而且没有任何预警和错误提示(但是会根据PRECOMBINE_FIELD_OPT_KEY的值比较，取最大值)
+- hudi在数据插入的时候，如果表类型是COW，则每一个数据的导入都会重写整个partition(和hive没有区别)，因此数据都是直接读到的；但是MOR的话，没有实现compact的话，数据是无法被impala读到的(impala只支持读compact之后的mor表)
+
+#### compaction
+hudi提供了几种不同的压缩策略，但都是基于不用的场合和文件的大小来区分
+> compaction strategy
 <https://cwiki.apache.org/confluence/display/HUDI/def~compaction>
 delta.commits=1 if want to optimized data-freshness and use for read-optimized queries
 <https://github.com/apache/hudi/issues/2151>
@@ -140,6 +146,9 @@ delta.commits=1 if want to optimized data-freshness and use for read-optimized q
 |insert|和上面的批量插入性能相似。更多的取决于文件插入的并行|
 |upsert(insert&de-duplicate)|性能会受到index的设置影响。相比spark直接join表重写，如果index设置合理，7-10X快于spark；相比重写整个partition，hudi的速度取决于文件的数量：一个partition一共有1000个文件，其中100个需要更新，那么就是10X快于重新|
 
+Hudi默认upsert/insert/delete的并发度是1500，对于演示的小规模数据集可设置更小的并发度。
+同时如果设置的record_key是一个保持单调递增的话，可以对写入的速度进行优化。比如官方推荐使用时间戳或者uuid
+
 >Like with many typical system that manage time-series data, Hudi performs much better if your keys have a timestamp prefix or monotonically increasing/decreasing. Even if you have UUID keys, you can follow tricks like this to get keys that are ordered.
 
 #### 读取性能
@@ -150,9 +159,17 @@ delta.commits=1 if want to optimized data-freshness and use for read-optimized q
 write hudi dataset
 数据源如果是kafka，DFS，可以使用流式，比如推荐使用delta streaming来写，同时也支持通过spark datasource API，或者使用hudi datasource来写程序
 
-处理重复的数据：
-hudi在写数据的时候，可以通过DataSourceWriteOptions的两个参数控制HoodieKey
-只有在数据写类型是upsert的时候，财货有
+
+#### 测试结果
+
+写入读写做了一个简单的测试
+1. 写了20个parquet文件，每个文件一个分区，一个parquet文件里有300w数据：写入数据到一个hudiTable大约花40s时间写入和compact。
+同时由于写入的时候会针对record_key进行去重和比较，写入300w record_key完全不同和完全相同的数据耗时没有什么区别
+2. 写了2个parquet文件，每个parquet中也是300w数据：写入到一个表中：第一次把300w数据分成30w分区，每个分区10条数据，写入前15w分区耗时23min，23w分区耗时1h
+
+
+读数据：由于数据目前都是在commit提交之后直接compact，因此对于impala来说只需要refresh table之后读取即可，数据的读取没有时间的延迟，主要是花费在compact
+
 
 ### index
 <http://hudi.apache.org/blog/hudi-indexing-mechanisms/>
@@ -168,10 +185,8 @@ hudi使用index来标记文件的file group，用于数据的快速的插入和�
 不过需要注意的是：使用Global类型的索引是有代价的，每次更新和删除操作都需要影响到全表的所有文件，所以它比较适合数据量较小的表，不适合大表
 
 
-
 ### 数据整合
 
 #### 整合类型
 - 同步：在每一次数据的提交之后就同步到parquet文件中，而且在整合结束之前，下一次的数据写操作不能执行
 - 异步：不会阻塞，近似实时的写入。可以通过Hudi DeltaStreamer，Spark Structured Streaming来实现(spark只能支持文件打到一定大小或者有了一定的提交次数之后才能对数据进行整合。deltaStreaming可以通过设定时间段来对数据进行整合)
-- 
